@@ -21,8 +21,8 @@ typedef boost::interprocess::vector<MyShmString, StringAllocator> MyShmStringVec
 class lambda_class {
 public:
     void lambda_callback(char *c, int rc) {
-      this->sample_count_ += rc;
-      this->output_file_.write(c, rc * 2);
+        this->sample_count_ += rc/2;
+        this->output_file_.write(c, rc);
     }
 
     lambda_class(std::string filename) {
@@ -51,32 +51,28 @@ private:
 class input_class {
 public:
     input_class() {
-      boost::interprocess::shared_memory_object::remove("MySharedMemory");
-      this->shm = new boost::interprocess::managed_shared_memory(boost::interprocess::create_only, "MySharedMemory",
-                                                                 1000000);
-      CharAllocator charallocator(this->shm->get_segment_manager());
-      StringAllocator stringallocator(this->shm->get_segment_manager());
-      this->myshmvector = shm->construct<MyShmStringVector>("myshmvector")(stringallocator);
+        boost::interprocess::shared_memory_object::remove("MySharedMemory");
+        this->shm = new boost::interprocess::managed_shared_memory(boost::interprocess::create_only, "MySharedMemory",
+                1000000);
+        CharAllocator charallocator(this->shm->get_segment_manager());
+        StringAllocator stringallocator(this->shm->get_segment_manager());
+        this->myshmvector = shm->construct<MyShmStringVector>("myshmvector")(stringallocator);
     };
 
     ~input_class() {
-      lambda_class *lc = new lambda_class("listener_vector.wav");
-      char *c = (char *) malloc(2048);
-      for (MyShmStringVector::iterator it = this->myshmvector->begin(); it != this->myshmvector->end(); it++) {
-        strcpy(c, it->c_str());
-        lc->lambda_callback(c, 2048);
-      }
-      delete lc;
-      boost::interprocess::shared_memory_object::remove("MySharedMemory");
-      this->shm->destroy_ptr(this->myshmvector);
+        lambda_class lc("listener_vector.wav");
+        char c[4096];
+        for (MyShmStringVector::iterator it = this->myshmvector->begin(); it != this->myshmvector->end(); it++) {
+            assert(it->size()<=sizeof(c));
+            memcpy(c, it->c_str(), it->size());
+            lc.lambda_callback(c, it->size());
+        }
+        boost::interprocess::shared_memory_object::remove("MySharedMemory");
+        shm->destroy_ptr(this->myshmvector);
     }
 
     void to_node(char *c, int rc) {
-      CharAllocator charallocator(this->shm->get_segment_manager());
-      StringAllocator stringallocator(this->shm->get_segment_manager());
-      MyShmString mystring(charallocator);
-      mystring = c;
-      this->myshmvector->insert(this->myshmvector->begin(), mystring);
+        this->myshmvector->emplace_back(c, rc*2, shm->get_segment_manager());
     }
 
 private:
@@ -87,16 +83,16 @@ private:
 void listener() {
     lambda_class ctc("writer.wav");
 
-    char *c = (char *) malloc(2048);
+    char c[4096];
 
     boost::interprocess::managed_shared_memory segment(boost::interprocess::open_only, "MySharedMemory");
     MyShmStringVector *myvector = segment.find<MyShmStringVector>("myshmvector").first;
 
-
     for (MyShmStringVector::iterator it = myvector->begin(); it != myvector->end(); it++) {
         //strcpy(c, std::string(it->begin(), it->end()).c_str()); //HUHUH!?!
-        strcpy(c, it->c_str());
-        ctc.lambda_callback(c, 2048);
+        assert(it->size()<=sizeof(c));
+        memcpy(c, it->c_str(), it->size());
+        ctc.lambda_callback(c, it->size());
     }
 }
 
