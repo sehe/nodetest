@@ -5,7 +5,7 @@ set(EXEC_NAME nodetest)
 
 find_package(ALSA) #alsa
 find_package (Threads) #pthread
-find_package(Boost 1.58.0) #boost
+find_package(Boost 1.54.0) #boost
 
 set(INCLUDE_DIR ./include)
 

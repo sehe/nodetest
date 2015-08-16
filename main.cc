@@ -33,9 +33,11 @@ public:
     }
 
     ~lambda_class() {
-      this->output_file_.close();
-      this->output_file_.open(this->filename_,
-                              std::ios::binary | std::ios::in);
+      /*
+       *this->output_file_.close();
+       *this->output_file_.open(this->filename_, std::ios::binary | std::ios::in);
+       */
+      output_file_.seekp(0ul);
       write_header_wav(this->output_file_, 16000, 16, MONO, this->sample_count_);
     }
 
@@ -83,44 +85,36 @@ private:
 };
 
 void listener() {
-  lambda_class *ctc = new lambda_class("writer.wav");
-  char *c = (char *) malloc(2048);
-  boost::interprocess::managed_shared_memory segment(boost::interprocess::open_only, "MySharedMemory");
-  MyShmStringVector *myvector = segment.find<MyShmStringVector>("myshmvector").first;
+    lambda_class ctc("writer.wav");
+
+    char *c = (char *) malloc(2048);
+
+    boost::interprocess::managed_shared_memory segment(boost::interprocess::open_only, "MySharedMemory");
+    MyShmStringVector *myvector = segment.find<MyShmStringVector>("myshmvector").first;
 
 
-  for (MyShmStringVector::iterator it = myvector->begin(); it != myvector->end(); it++) {
-    strcpy(c, std::string(it->begin(), it->end()).c_str());
-    ctc->lambda_callback(c, 2048);
-  }
-
-  delete ctc;
-  return;
+    for (MyShmStringVector::iterator it = myvector->begin(); it != myvector->end(); it++) {
+        //strcpy(c, std::string(it->begin(), it->end()).c_str()); //HUHUH!?!
+        strcpy(c, it->c_str());
+        ctc.lambda_callback(c, 2048);
+    }
 }
 
 int main(int argc, char **argv) {
-  alsa_control *ac = new alsa_control(16000, 2048, 16, MONO);
+    alsa_control ac(16000, 2048, 16, MONO);
 
-  if (argc == 1) {
-
-    input_class *ic = new input_class();
-    ac->listen_with_callback(std::bind(&input_class::to_node, ic, std::placeholders::_1, std::placeholders::_2),
-                             "listener");
-    sleep(5);
-    ac->stop();
-    cout << "Go" << endl;
-    sleep(10);
-
-    delete ic;
-    delete ac;
-  } else {
-
-//    std::atomic<bool> done(false);
-    auto th = std::async(std::launch::async, listener);
-//    done.store(true, std::memory_order_relaxed);
-    th.get();
-  }
-
-
-  return 0;
+    if (argc == 1) {
+        input_class ic;
+        ac.listen_with_callback(std::bind(&input_class::to_node, &ic, std::placeholders::_1, std::placeholders::_2), "listener");
+        sleep(5);
+        ac.stop();
+        cout << "Go" << endl;
+        sleep(10);
+    } else {
+        //    std::atomic<bool> done(false);
+        auto th = std::async(std::launch::async, listener);
+        //    done.store(true, std::memory_order_relaxed);
+        th.get();
+    }
+    return 0;
 }
